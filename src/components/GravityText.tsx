@@ -27,15 +27,13 @@ export const GravityText = ({ text }: { text: string }) => {
 
     const initParticles = () => {
       particles.current = [];
-      const fontSize = 24; // เพิ่มขนาดตัวอักษร
+      const fontSize = 24;
       ctx.font = `${fontSize}px 'IBM Plex Mono'`;
       
-      // คำนวณความกว้างของข้อความเพื่อจัดกึ่งกลาง
       const textWidth = ctx.measureText(text).width;
       const startX = (canvas.width - textWidth) / 2;
       const startY = canvas.height / 2;
 
-      // สร้าง particles สำหรับแต่ละตัวอักษร
       [...text].forEach((char, i) => {
         const x = startX + i * (fontSize * 0.6);
         particles.current.push({
@@ -51,35 +49,9 @@ export const GravityText = ({ text }: { text: string }) => {
       });
     };
 
-    const drawScanlines = () => {
-      const scanlineHeight = 2;
-      const scanlineSpacing = 4;
-      ctx.fillStyle = 'rgba(0, 255, 0, 0.03)';
-      
-      for (let y = 0; y < canvas.height; y += scanlineSpacing) {
-        ctx.fillRect(0, y, canvas.width, scanlineHeight);
-      }
-    };
-
-    const drawCRTNoise = () => {
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      
-      for (let i = 0; i < data.length; i += 4) {
-        const noise = Math.random() * 0.05;
-        data[i] = data[i] * (1 + noise);
-        data[i + 1] = data[i + 1] * (1 + noise);
-        data[i + 2] = data[i + 2] * (1 + noise);
-      }
-      
-      ctx.putImageData(imageData, 0, 0);
-    };
-
     const animate = () => {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      drawScanlines();
       
       particles.current.forEach(particle => {
         // คำนวณระยะห่างจากเมาส์
@@ -87,44 +59,42 @@ export const GravityText = ({ text }: { text: string }) => {
         const dy = mousePos.current.y - particle.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         
-        // ปรับปรุงแรงโน้มถ่วง
-        const gravitationalConstant = 1;
-        const force = dist < 200 ? (gravitationalConstant * 100) / (dist * dist + 100) : 0;
+        // คำนวณแรงโน้มถ่วงตามกฎของนิวตัน F = G * (m1 * m2) / r^2
+        const G = 1; // ค่าคงที่แรงโน้มถ่วง
+        const m1 = 1; // มวลของอนุภาค
+        const m2 = 100; // มวลของเคอร์เซอร์
+        const force = dist < 200 ? (G * m1 * m2) / (dist * dist + 1) : 0;
         
-        // ใช้สมการการเคลื่อนที่แบบ Verlet Integration
+        // ใช้สมการการเคลื่อนที่แบบ Velocity Verlet Integration
         const dt = 0.16; // delta time
-        const drag = 0.95; // แรงต้าน
+        const drag = 0.97; // แรงต้านอากาศ (เพิ่มขึ้นเพื่อการเคลื่อนที่ที่นุ่มนวลขึ้น)
         
-        // คำนวณความเร่งจากแรงโน้มถ่วงและแรงสปริง
-        const ax = dx * force * 0.1;
-        const ay = dy * force * 0.1;
+        // คำนวณความเร่งตามกฎข้อที่สองของนิวตัน a = F/m
+        const ax = force > 0 ? (dx / dist) * (force / m1) : 0;
+        const ay = force > 0 ? (dy / dist) * (force / m1) : 0;
         
-        // แรงสปริงแบบ Hooke's Law
-        const springConstant = 0.03;
-        const springX = (particle.originX - particle.x) * springConstant;
-        const springY = (particle.originY - particle.y) * springConstant;
+        // แรงสปริงตามกฎของฮุค F = -kx
+        const k = 0.05; // spring constant
+        const springX = (particle.originX - particle.x) * k;
+        const springY = (particle.originY - particle.y) * k;
         
-        // อัปเดตความเร็วและตำแหน่ง
-        particle.vx = (particle.vx + (ax + springX) * dt) * drag;
-        particle.vy = (particle.vy + (ay + springY) * dt) * drag;
+        // อัพเดทความเร็วและตำแหน่งด้วย Velocity Verlet
+        const oldVx = particle.vx;
+        const oldVy = particle.vy;
         
-        particle.x += particle.vx;
-        particle.y += particle.vy;
+        particle.vx = (oldVx + (ax + springX) * dt) * drag;
+        particle.vy = (oldVy + (ay + springY) * dt) * drag;
         
-        // ปรับความโปร่งใสตามระยะห่างจากเมาส์
-        particle.opacity = dist < 100 ? 1 - (dist / 100) * 0.5 : 1;
+        particle.x += (oldVx + particle.vx) * 0.5 * dt;
+        particle.y += (oldVy + particle.vy) * 0.5 * dt;
         
-        // วาดตัวอักษรพร้อมเอฟเฟกต์เรืองแสง
-        ctx.save();
-        ctx.shadowColor = '#00ff00';
-        ctx.shadowBlur = 15;
-        ctx.globalAlpha = particle.opacity;
-        ctx.fillStyle = '#00ff00';
+        // ปรับความโปร่งใสตามระยะห่าง
+        particle.opacity = dist < 100 ? 0.3 + 0.7 * (dist / 100) : 1;
+        
+        // วาดตัวอักษรด้วยสไตล์เทอร์มินัล
+        ctx.fillStyle = `rgba(0, 255, 0, ${particle.opacity})`;
         ctx.fillText(particle.char, particle.x, particle.y);
-        ctx.restore();
       });
-      
-      drawCRTNoise();
       
       animationFrame.current = requestAnimationFrame(animate);
     };
@@ -142,7 +112,6 @@ export const GravityText = ({ text }: { text: string }) => {
       };
     };
 
-    // ติดตั้งและเริ่มต้นการทำงาน
     handleResize();
     window.addEventListener('resize', handleResize);
     window.addEventListener('mousemove', handleMouseMove);
@@ -161,9 +130,6 @@ export const GravityText = ({ text }: { text: string }) => {
     <canvas
       ref={canvasRef}
       className="fixed inset-0 bg-terminal-bg"
-      style={{
-        imageRendering: 'pixelated'
-      }}
     />
   );
 };
