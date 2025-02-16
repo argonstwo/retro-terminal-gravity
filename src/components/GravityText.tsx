@@ -49,28 +49,6 @@ export const GravityText = ({ text }: { text: string }) => {
       });
     };
 
-    const calculateRelativisticGravity = (dx: number, dy: number, dist: number) => {
-      // คำนวณแรงโน้มถ่วงตามทฤษฎีสัมพัทธภาพทั่วไป
-      const G = 1; // ค่าคงที่แรงโน้มถ่วง
-      const c = 300; // ความเร็วแสง (scaled)
-      const Rs = 2 * G * 100 / (c * c); // รัศมี Schwarzschild
-      
-      // คำนวณการบิดเบือนของเวลาและอวกาศ
-      const gravitationalTimeDilation = Math.sqrt(1 - Rs / (dist + Rs));
-      
-      // คำนวณการเบนของแสง (gravitational lensing)
-      const bendingAngle = 4 * G * 100 / (c * c * dist);
-      
-      // คำนวณแรงที่เพิ่มขึ้นเมื่อเข้าใกล้ขอบฟ้าเหตุการณ์
-      const eventHorizonEffect = dist < Rs * 3 ? Math.pow(Rs / dist, 2) : 0;
-      
-      return {
-        force: G * 100 / (dist * dist) * (1 + eventHorizonEffect),
-        timeDilation: gravitationalTimeDilation,
-        bendingAngle: bendingAngle
-      };
-    };
-
     const animate = () => {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -81,23 +59,26 @@ export const GravityText = ({ text }: { text: string }) => {
         const dy = mousePos.current.y - particle.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         
-        // คำนวณผลกระทบจากสัมพัทธภาพ
-        const { force, timeDilation, bendingAngle } = calculateRelativisticGravity(dx, dy, dist);
+        // คำนวณแรงโน้มถ่วงตามกฎของนิวตัน F = G * (m1 * m2) / r^2
+        const G = 1; // ค่าคงที่แรงโน้มถ่วง
+        const m1 = 1; // มวลของอนุภาค
+        const m2 = 100; // มวลของเคอร์เซอร์
+        const force = dist < 200 ? (G * m1 * m2) / (dist * dist + 1) : 0;
         
         // ใช้สมการการเคลื่อนที่แบบ Velocity Verlet Integration
-        const dt = 0.16 * timeDilation; // เวลาถูกบิดเบือนตามทฤษฎีสัมพัทธภาพ
-        const drag = 0.97; 
+        const dt = 0.16; // delta time
+        const drag = 0.97; // แรงต้านอากาศ (เพิ่มขึ้นเพื่อการเคลื่อนที่ที่นุ่มนวลขึ้น)
         
-        // คำนวณความเร่งรวมผลของการบิดเบือนอวกาศ
-        const ax = (dx / dist) * force * Math.cos(bendingAngle);
-        const ay = (dy / dist) * force * Math.sin(bendingAngle);
+        // คำนวณความเร่งตามกฎข้อที่สองของนิวตัน a = F/m
+        const ax = force > 0 ? (dx / dist) * (force / m1) : 0;
+        const ay = force > 0 ? (dy / dist) * (force / m1) : 0;
         
-        // แรงสปริงถูกปรับตามการบิดเบือนของอวกาศ
-        const k = 0.05 * timeDilation;
+        // แรงสปริงตามกฎของฮุค F = -kx
+        const k = 0.05; // spring constant
         const springX = (particle.originX - particle.x) * k;
         const springY = (particle.originY - particle.y) * k;
         
-        // อัพเดทความเร็วและตำแหน่ง
+        // อัพเดทความเร็วและตำแหน่งด้วย Velocity Verlet
         const oldVx = particle.vx;
         const oldVy = particle.vy;
         
@@ -107,10 +88,10 @@ export const GravityText = ({ text }: { text: string }) => {
         particle.x += (oldVx + particle.vx) * 0.5 * dt;
         particle.y += (oldVy + particle.vy) * 0.5 * dt;
         
-        // ปรับความโปร่งใสตามระยะห่างและการบิดเบือนของเวลา
-        particle.opacity = dist < 100 ? 0.3 + 0.7 * (dist / 100) * timeDilation : 1;
+        // ปรับความโปร่งใสตามระยะห่าง
+        particle.opacity = dist < 100 ? 0.3 + 0.7 * (dist / 100) : 1;
         
-        // วาดตัวอักษร
+        // วาดตัวอักษรด้วยสไตล์เทอร์มินัล
         ctx.fillStyle = `rgba(0, 255, 0, ${particle.opacity})`;
         ctx.fillText(particle.char, particle.x, particle.y);
       });
